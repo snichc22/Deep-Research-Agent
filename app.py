@@ -138,7 +138,7 @@ class ResearchPanel:
 
         return Panel(
             t,
-            title="[bold cyan] Deep Research[/bold cyan]",
+            title="[bold cyan] Deep Research [/bold cyan]",
             subtitle=f"[dim]{self.model}[/dim]",
             border_style="cyan",
             padding=(0, 1),
@@ -225,9 +225,10 @@ def print_report(con: Console, topic: str, report: str) -> None:
     con.print()
     con.print(Padding(Markdown(report), (0, 4, 1, 4)))
     con.print(Rule(style="bright_black"))
-    con.print()
-    con.print("  [dim]Raw Report Content:[/dim]")
-    con.print(report)
+
+    # con.print()
+    # con.print("  [dim]Raw Report Content:[/dim]")
+    # con.print(report)
 
     safe = "".join(c if c.isalnum() or c in " _-" else "_" for c in topic)[:50]
     fname = os.path.join("reports", f"report_{safe.strip().replace(' ', '_')}.md")

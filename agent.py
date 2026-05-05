@@ -8,11 +8,11 @@ from typing import Any, Callable, Union
 import ollama
 import requests
 from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 # ──────────────────────────────────────────────────────────────
 
-MODEL = "gemma4:27b"
+MODEL = "gemma4:26b"
 MAX_ITERS = 30
 N_RESULTS = 6
 PAGE_LIMIT = 7500

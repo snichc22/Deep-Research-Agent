@@ -1,5 +1,5 @@
 ollama
 requests
 beautifulsoup4
-duckduckgo-search
 rich
+ddgs
