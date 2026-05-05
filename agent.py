@@ -121,3 +121,154 @@ def _fetch_webpage(url: str) -> str:
     except Exception as exc:
         return f"[Error: {exc}]"
 
+
+# ──────────────────────────────────────────────────────────────
+
+_TOOLS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "declare_research_plan",
+            "description": (
+                "CALL THIS FIRST. Declare the sub-questions that will structure your "
+                "research and briefly describe your approach before doing any searches."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sub_questions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "5-10 focused sub-questions to investigate.",
+                    },
+                    "approach": {
+                        "type": "string",
+                        "description": "One sentence describing your overall research strategy.",
+                    },
+                },
+                "required": ["sub_questions", "approach"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": (
+                "Search the web via DuckDuckGo. Returns titles, URLs, and text snippets. "
+                "Use distinct queries to cover different angles of the topic."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query."},
+                    "max_results": {"type": "integer", "default": N_RESULTS},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_webpage",
+            "description": (
+                "Fetch and read the full text content of a URL. "
+                "Use after web_search to read complete articles beyond the snippet."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Full URL (https://…) to fetch."},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+]
+
+
+# ──────────────────────────────────────────────────────────────
+
+def run(
+        topic: str,
+        on_event: EventCallback = lambda _: None,
+) -> str:
+    messages: list[dict] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"Research topic: **{topic}**\n\n"
+                "Begin with `declare_research_plan`, then search the web thoroughly "
+                "and produce the final comprehensive report."
+            ),
+        },
+    ]
+
+    report = ""
+    n_search = 0
+    n_fetch = 0
+    t0 = time.time()
+
+    for _iter in range(MAX_ITERS):
+        on_event(StatusEvent("Thinking..."))
+
+        opts: dict[str, Any] = {"temperature": 0.7}
+        if THINK:
+            opts["think"] = True
+
+        resp = ollama.chat(model=MODEL, messages=messages, tools=_TOOLS, options=opts)
+        msg = resp.message
+
+        entry: dict[str, Any] = {"role": "assistant", "content": msg.content or ""}
+        if msg.tool_calls:
+            entry["tool_calls"] = msg.tool_calls
+        messages.append(entry)
+
+        if not msg.tool_calls:
+            on_event(StatusEvent("Writing report..."))
+            report = msg.content or ""
+            break
+
+        for tc in msg.tool_calls:
+            name = tc.function.name
+            args = tc.function.arguments or {}
+
+            if name == "declare_research_plan":
+                qs = args.get("sub_questions", [])
+                approach = args.get("approach", "")
+                on_event(PlanEvent(sub_questions=qs, approach=approach))
+                on_event(StatusEvent(f"Planning: {approach[:80]}"))
+                result = json.dumps({"status": "ok", "registered": len(qs)})
+
+            elif name == "web_search":
+                n_search += 1
+                query = args.get("query", "")
+                on_event(SearchEvent(n=n_search, query=query))
+                on_event(StatusEvent(f"Searching: {query[:50]}"))
+                result = json.dumps(_web_search(**args), ensure_ascii=False)
+
+            elif name == "fetch_webpage":
+                n_fetch += 1
+                url = args.get("url", "")
+                on_event(FetchEvent(n=n_fetch, url=url))
+                on_event(StatusEvent(f"Reading: {url[:80]}"))
+                result = _fetch_webpage(url)
+
+            else:
+                result = f"[Unknown tool: {name}]"
+
+            messages.append({"role": "tool", "content": result})
+
+    if not report:
+        on_event(StatusEvent("<!> Max iterations — generating report now..."))
+        messages.append({
+            "role": "user",
+            "content": "Write the final report now from all research gathered so far.",
+        })
+        fb = ollama.chat(model=MODEL, messages=messages)
+        report = fb.message.content or ""
+
+    on_event(DoneEvent(n_search=n_search, n_fetch=n_fetch, elapsed=time.time() - t0))
+    return report
