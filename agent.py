@@ -30,6 +30,11 @@ PROTOCOL — follow in order:
 4. Repeat steps 2-3 until you have 8-15 solid sources.
 5. Write the final comprehensive report — markdown, with headers, and [Source N] citations.
 
+STRICT RESEARCH MINIMUMS (DO NOT DEVIATE):
+- You MUST perform at least 5 distinct `web_search` calls.
+- You MUST perform at least 8 `fetch_webpage` calls.
+- Do not attempt to write the final report until these minimums are met.
+
 RULES:
 - ALWAYS call `declare_research_plan` before any search.
 - Run at least 5 distinct searches from different angles.
@@ -227,6 +232,19 @@ def run(
         messages.append(entry)
 
         if not msg.tool_calls:
+            if n_search < 5 or n_fetch < 8:
+                needed_searches = max(0, 5 - n_search)
+                needed_fetches = max(0, 8 - n_fetch)
+                deficiency_msg = (
+                    f"Your research is currently insufficient. "
+                    f"You have performed {n_search} searches (minimum 5 required) "
+                    f"and {n_fetch} page reads (minimum 8 required). "
+                    f"Please continue searching and reading until these thresholds are met before writing the report."
+                )
+                messages.append({"role": "user", "content": deficiency_msg})
+                on_event(StatusEvent(f"Research insufficient: {n_search} searches, {n_fetch} reads. Continuing..."))
+                continue
+
             on_event(StatusEvent("Writing report..."))
             report = msg.content or ""
             break
